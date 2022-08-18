@@ -1,0 +1,189 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+
+class CostCenterController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index(Request $request)
+    {
+        try {
+            if (!$request->request_server) {
+                return redirect(route('layout'));
+            }
+            $libraryController = new LibraryController;
+            $campaigns = $libraryController->requestAsync("GET", "/api/campaigns");
+            $me = $libraryController->requestAsync("POST", "/api/me");
+            $clients = [];
+            if ($me['alternative_profile']) {
+                $clients = $libraryController->requestAsync("GET", "/api/clients")['data'];
+            }
+            if ($campaigns['error'] != 0) {
+                return view('home');
+            }
+            return view('cost_center.index',['campaigns' => $campaigns['data'], 'clients' => $clients]);
+        } catch (Exception $e) {
+            throw $e;
+            LibraryController::recordError($e);
+            return LibraryController::responseApi(["title" => __('messages.titleLoadPageError'), "message" => __('messages.defaultMessage')], "", 500);
+        }
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        //
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        try {
+            $rules = [
+                'name' => 'required'
+            ];
+            $me = LibraryController::requestAsync("POST", "/api/me");
+            if ($me['alternative_profile']) {
+                $rules['id_client'] = 'required';
+            }
+            $validate = Validator::make($request->all(), $rules);
+            if ($validate->fails()) {
+                return response(['status' => 'error', 'message' => $validate->getMessageBag()], 200);
+            }
+            $menuroles = 'user';
+            if ($request->id_profile == 1) {
+                $menuroles = 'root,admin,user';
+            }else if ($request->id_profile == 2) {
+                $menuroles = 'admin,user';
+            }else if ($request->id_profile == 3) {
+                $menuroles = 'user';
+            }
+            $request->request->add(['menuroles' => $menuroles]);
+            $request->request->add(['active' => 1]);
+
+            $libraryController = new LibraryController;
+            $responseUser = $libraryController->requestAsync('POST', '/api/campaigns', $request->all());
+            return response($responseUser);
+        } catch (Exception $e) {
+            LibraryController::recordError($e);
+            return LibraryController::responseApi(["title" => __('messages.titleStoreError'), "message" => __('messages.defaultMessage')], "", 500);
+        }
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        try {
+            $libraryController = new LibraryController;
+            $costCenterResponse = $libraryController->requestAsync("GET", "/api/campaigns/$id");
+            $me = $libraryController->requestAsync("POST", "/api/me");
+            $clients = [];
+            if ($me['alternative_profile']) {
+                $clients = $libraryController->requestAsync("GET", "/api/clients")['data'];
+            }
+            $campaign = $costCenterResponse;
+            return view('cost_center.edit', ['campaign' => $campaign['data'], 'clients' => $clients]);
+        } catch (Exception $e) {
+            LibraryController::recordError($e);
+            return LibraryController::responseApi(["title" => __('messages.titleLoadPageError'), "message" => __('messages.defaultMessage')], "", 500);
+        }
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, $id)
+    {
+        try {
+            $rules = [
+                'name' => 'required'
+            ];
+            $me = LibraryController::requestAsync("POST", "/api/me");
+            if ($me['alternative_profile']) {
+                $rules['id_client'] = 'required';
+            }
+            $validate = Validator::make($request->all(), $rules);
+            if ($validate->fails()) {
+                return response(['status' => 'error', 'message' => $validate->getMessageBag()], 200);
+            }
+            $libraryController = new LibraryController;
+            $responseUser = $libraryController->requestAsync('PUT', "/api/campaigns/$id", $request->all());
+            return response($responseUser);
+        } catch (Exception $e) {
+            LibraryController::recordError($e);
+            return LibraryController::responseApi(["title" => __('messages.titleUpdateError'), "message" => __('messages.defaultMessage')], "", 500);
+        }
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
+    {
+        try {
+            $libraryController = new LibraryController;
+            $campaign = $libraryController->requestAsync("DELETE", "/api/campaigns/$id");
+            return response($campaign);
+        } catch (Exception $e) {
+            LibraryController::recordError($e);
+            return LibraryController::responseApi(["title" => __('messages.titleDestroyError'), "message" => __('messages.defaultMessage')], "", 500);
+        }
+    }
+
+    public function active_cost_center(Request $request)
+    {
+        try {
+            $data = [
+                'id' => $request->id,
+                'active' => $request->active == 'true' ? 1 : 0
+            ];
+            $libraryController = new LibraryController;
+            $response = $libraryController->requestAsync("PUT", "/api/campaigns/activecostcenter", $data);
+
+            return response($response);
+        } catch (Exception $e) {
+            LibraryController::recordError($e);
+            return LibraryController::responseApi(["title" => __('messages.titleActiveError', ["status" => ($request->active == 'true' ? 'ativar' : 'inativar')]), "message" => __('messages.defaultMessage')], "", 500);
+        }
+    }
+}
